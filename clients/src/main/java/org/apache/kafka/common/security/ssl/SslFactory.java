@@ -34,7 +34,9 @@ import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManagerFactory;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
@@ -130,6 +132,7 @@ public class SslFactory implements Reconfigurable {
 
         this.truststore = createTruststore((String) configs.get(SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG),
                          (String) configs.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG),
+                         (String) configs.get(SslConfigs.SSL_TRUSTSTORE_RESOURCE_LOCATION_CONFIG),
                          (Password) configs.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG));
         try {
             this.sslContext = createSSLContext(keystore);
@@ -263,13 +266,17 @@ public class SslFactory implements Reconfigurable {
             return null; // path == null, clients may use this path with brokers that don't require client auth
     }
 
-    private SecurityStore createTruststore(String type, String path, Password password) {
-        if (path == null && password != null) {
+    private SecurityStore createTruststore(String type, String path, String resourcePath, Password password) {
+        if (path == null && resourcePath == null && password != null) {
             throw new KafkaException("SSL trust store is not specified, but trust store password is specified.");
-        } else if (path != null) {
+        } else if ((path != null || resourcePath != null) && password == null) {
+            throw new KafkaException("SSL trust store is specified, but trust store password is not specified.");
+        } else if (path != null && password != null) {
             return new SecurityStore(type, path, password, null);
-        } else
-            return null;
+        } else if  (resourcePath != null && password != null) {
+            return new SecurityResourceStore(type, path, password, null);
+        }
+        return null;
     }
 
     // package access for testing
@@ -294,7 +301,7 @@ public class SslFactory implements Reconfigurable {
          *   using the specified configs (e.g. if the password or keystore type is invalid)
          */
         KeyStore load() {
-            try (FileInputStream in = new FileInputStream(path)) {
+            try (InputStream in = getInputStream(path)) {
                 KeyStore ks = KeyStore.getInstance(type);
                 // If a password is not set access to the truststore is still available, but integrity checking is disabled.
                 char[] passwordChars = password != null ? password.value().toCharArray() : null;
@@ -303,6 +310,26 @@ public class SslFactory implements Reconfigurable {
             } catch (GeneralSecurityException | IOException e) {
                 throw new KafkaException("Failed to load SSL keystore " + path + " of type " + type, e);
             }
+        }
+
+        protected InputStream getInputStream(String path) throws IOException {
+            return new FileInputStream(path);
+        }
+    }
+
+    private static class SecurityResourceStore extends SecurityStore {
+
+        private SecurityResourceStore(String type, String path, Password password, Password keyPassword) {
+            super(type, path, password, keyPassword);
+        }
+
+        @Override
+        protected InputStream getInputStream(String path) throws IOException {
+            InputStream input = this.getClass().getResourceAsStream(path);
+            if(input == null) {
+                throw new FileNotFoundException(path);
+            }
+            return input;
         }
     }
 
