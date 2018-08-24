@@ -84,12 +84,16 @@ public class MultiSend implements Send {
 
         int totalWrittenPerCall = 0;
         boolean sendComplete;
+        long start = System.nanoTime();
+        int sends = 0;
         do {
             long written = current.writeTo(channel);
             totalWrittenPerCall += written;
             sendComplete = current.completed();
-            if (sendComplete)
+            if (sendComplete) {
                 current = sendQueue.poll();
+                sends++;
+            }
         } while (!completed() && sendComplete);
 
         totalWritten += totalWrittenPerCall;
@@ -97,8 +101,8 @@ public class MultiSend implements Send {
         if (completed() && totalWritten != size)
             log.error("mismatch in sending bytes over socket; expected: " + size + " actual: " + totalWritten);
 
-        log.trace("Bytes written as part of multi-send call: {}, total bytes written so far: {}, expected bytes to write: {}",
-                totalWrittenPerCall, totalWritten, size);
+        log.trace("Bytes written as part of multi-send call: {}, total bytes written so far: {}, expected bytes to write: {}, in {} ms with {} sends",
+                totalWrittenPerCall, totalWritten, size, (System.nanoTime() - start) / 1000000.0, sends);
 
         return totalWrittenPerCall;
     }
