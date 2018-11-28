@@ -35,6 +35,7 @@ import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManagerFactory;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -136,6 +137,7 @@ public class SslFactory implements Reconfigurable {
 
         this.truststore = createTruststore((String) configs.get(SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG),
                          (String) configs.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG),
+                         (String) configs.get(SslConfigs.SSL_TRUSTSTORE_RESOURCE_LOCATION_CONFIG),
                          (Password) configs.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG));
         try {
             this.sslContext = createSSLContext(keystore, truststore);
@@ -212,6 +214,7 @@ public class SslFactory implements Reconfigurable {
         if (truststoreChanged) {
             return createTruststore((String) configs.get(SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG),
                     (String) configs.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG),
+                    (String) configs.get(SslConfigs.SSL_TRUSTSTORE_RESOURCE_LOCATION_CONFIG),
                     (Password) configs.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG));
         } else
             return null;
@@ -303,13 +306,15 @@ public class SslFactory implements Reconfigurable {
             return null; // path == null, clients may use this path with brokers that don't require client auth
     }
 
-    private SecurityStore createTruststore(String type, String path, Password password) {
-        if (path == null && password != null) {
+    private SecurityStore createTruststore(String type, String path, String resourcePath, Password password) {
+        if (path == null && resourcePath == null && password != null) {
             throw new KafkaException("SSL trust store is not specified, but trust store password is specified.");
         } else if (path != null) {
             return new SecurityStore(type, path, password, null);
-        } else
-            return null;
+        } else if  (resourcePath != null) {
+            return new SecurityResourceStore(type, resourcePath, password, null);
+        }
+        return null;
     }
 
     // package access for testing
@@ -347,6 +352,10 @@ public class SslFactory implements Reconfigurable {
             }
         }
 
+        protected InputStream getInputStream(String path) throws IOException {
+            return Files.newInputStream(Paths.get(path));
+        }
+
         private Long lastModifiedMs(String path) {
             try {
                 return Files.getLastModifiedTime(Paths.get(path)).toMillis();
@@ -366,6 +375,21 @@ public class SslFactory implements Reconfigurable {
             return "SecurityStore(" +
                     "path=" + path +
                     ", modificationTime=" + (fileLastModifiedMs == null ? null : new Date(fileLastModifiedMs)) + ")";
+        }
+    }
+
+    private static class SecurityResourceStore extends SecurityStore {
+        private SecurityResourceStore(String type, String path, Password password, Password keyPassword) {
+            super(type, path, password, keyPassword);
+        }
+
+        @Override
+        protected InputStream getInputStream(String path) throws IOException {
+            InputStream input = this.getClass().getResourceAsStream(path);
+            if (input == null) {
+                throw new FileNotFoundException(path);
+            }
+            return input;
         }
     }
 
