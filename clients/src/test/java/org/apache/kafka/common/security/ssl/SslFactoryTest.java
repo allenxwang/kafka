@@ -17,6 +17,7 @@
 package org.apache.kafka.common.security.ssl;
 
 import java.io.File;
+import java.net.URL;
 import java.nio.file.Files;
 import java.security.KeyStore;
 import java.util.Map;
@@ -202,6 +203,21 @@ public class SslFactoryTest {
 
         KeyStore ks3 = sslKeyStore(newCnConfig).load();
         assertNotEquals(SslFactory.CertificateEntries.create(ks1), SslFactory.CertificateEntries.create(ks3));
+    }
+
+    @Test
+    public void testClientModeWithTrustStoreAsResource() throws Exception {
+        URL url = this.getClass().getResource("/");
+
+        File resourceRoot = new File(url.getPath());
+        File trustStoreFile = File.createTempFile("truststore", ".jks", resourceRoot);
+
+        Map<String, Object> clientSslConfig = TestSslUtils.createSslConfigWithTrustStoreResource(false, Mode.CLIENT, trustStoreFile, "client");
+        SslFactory sslFactory = new SslFactory(Mode.CLIENT);
+        sslFactory.configure(clientSslConfig);
+
+        SSLEngine engine = sslFactory.createSslEngine("localhost", 0);
+        assertTrue(engine.getUseClientMode());
     }
 
     private SslFactory.SecurityStore sslKeyStore(Map<String, Object> sslConfig) {

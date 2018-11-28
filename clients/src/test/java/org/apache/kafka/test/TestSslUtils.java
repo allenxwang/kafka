@@ -151,7 +151,7 @@ public class TestSslUtils {
     }
 
     private static Map<String, Object> createSslConfig(Mode mode, File keyStoreFile, Password password, Password keyPassword,
-                                                       File trustStoreFile, Password trustStorePassword) {
+                                                       File trustStoreFile, boolean loadTrustStoreAsResource, Password trustStorePassword) {
         Map<String, Object> sslConfigs = new HashMap<>();
         sslConfigs.put(SslConfigs.SSL_PROTOCOL_CONFIG, "TLSv1.2"); // protocol to create SSLContext
 
@@ -163,7 +163,11 @@ public class TestSslUtils {
             sslConfigs.put(SslConfigs.SSL_KEY_PASSWORD_CONFIG, keyPassword);
         }
 
-        sslConfigs.put(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, trustStoreFile.getPath());
+        if (loadTrustStoreAsResource) {
+            sslConfigs.put(SslConfigs.SSL_TRUSTSTORE_RESOURCE_LOCATION_CONFIG, "/" + trustStoreFile.getName());
+        } else {
+            sslConfigs.put(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, trustStoreFile.getPath());
+        }
         sslConfigs.put(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, trustStorePassword);
         sslConfigs.put(SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, "JKS");
         sslConfigs.put(SslConfigs.SSL_TRUSTMANAGER_ALGORITHM_CONFIG, TrustManagerFactory.getDefaultAlgorithm());
@@ -175,8 +179,15 @@ public class TestSslUtils {
         return sslConfigs;
     }
 
-    public static  Map<String, Object> createSslConfig(boolean useClientCert, boolean trustStore, Mode mode, File trustStoreFile, String certAlias)
+    public static  Map<String, Object> createSslConfigWithTrustStoreResource(boolean useClientCert,
+                                                       Mode mode, File trustStoreFile, String certAlias)
         throws IOException, GeneralSecurityException {
+        return createSslConfig(useClientCert, true, true, mode, trustStoreFile, certAlias, "localhost", new CertificateBuilder());
+    }
+
+    public static  Map<String, Object> createSslConfig(boolean useClientCert, boolean trustStore,
+                                                       Mode mode, File trustStoreFile, String certAlias)
+            throws IOException, GeneralSecurityException {
         return createSslConfig(useClientCert, trustStore, mode, trustStoreFile, certAlias, "localhost");
     }
 
@@ -186,7 +197,13 @@ public class TestSslUtils {
         return createSslConfig(useClientCert, trustStore, mode, trustStoreFile, certAlias, cn, new CertificateBuilder());
     }
 
-    public static  Map<String, Object> createSslConfig(boolean useClientCert, boolean trustStore,
+    public static  Map<String, Object> createSslConfig(boolean useClientCert, boolean trustStore, Mode mode,
+                                                       File trustStoreFile, String certAlias, String cn, CertificateBuilder certBuilder)
+            throws IOException, GeneralSecurityException {
+        return createSslConfig(useClientCert, trustStore, false, mode, trustStoreFile, certAlias, cn, certBuilder);
+    }
+
+    public static  Map<String, Object> createSslConfig(boolean useClientCert, boolean trustStore, boolean loadTrustStoreAsResource,
             Mode mode, File trustStoreFile, String certAlias, String cn, CertificateBuilder certBuilder)
             throws IOException, GeneralSecurityException {
         Map<String, X509Certificate> certs = new HashMap<>();
@@ -216,7 +233,7 @@ public class TestSslUtils {
             trustStoreFile.deleteOnExit();
         }
 
-        return createSslConfig(mode, keyStoreFile, password, password, trustStoreFile, trustStorePassword);
+        return createSslConfig(mode, keyStoreFile, password, password, trustStoreFile, loadTrustStoreAsResource, trustStorePassword);
     }
 
     public static class CertificateBuilder {
