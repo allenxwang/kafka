@@ -338,7 +338,7 @@ public class SslFactory implements Reconfigurable {
          *   using the specified configs (e.g. if the password or keystore type is invalid)
          */
         KeyStore load() {
-            try (InputStream in = Files.newInputStream(Paths.get(path))) {
+            try (InputStream in = getInputStream(path)) {
                 KeyStore ks = KeyStore.getInstance(type);
                 // If a password is not set access to the truststore is still available, but integrity checking is disabled.
                 char[] passwordChars = password != null ? password.value().toCharArray() : null;
