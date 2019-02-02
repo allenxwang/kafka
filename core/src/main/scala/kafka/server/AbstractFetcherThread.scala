@@ -179,8 +179,17 @@ abstract class AbstractFetcherThread(name: String,
       val fetchedEpochs = fetchEpochsFromLeader(epochRequests)
       //Ensure we hold a lock during truncation.
       inLock(partitionMapLock) {
-        //Check no leadership changes happened whilst we were unlocked, fetching epochs
-        val leaderEpochs = fetchedEpochs.filter { case (tp, _) => partitionStates.contains(tp) }
+        //Check no leadership and no leader epoch changes happened whilst we were unlocked, fetching epochs
+        val leaderEpochs = fetchedEpochs.filter { case (tp, _) =>
+          val curPartitionState = partitionStates.stateValue(tp)
+          val partitionEpochRequest = epochRequests.get(tp).getOrElse {
+            throw new IllegalStateException(
+              s"Leader replied with partition $tp not requested in OffsetsForLeaderEpoch request")
+          }
+          val leaderEpochInRequest = partitionEpochRequest.currentLeaderEpoch.get
+          curPartitionState != null && leaderEpochInRequest == curPartitionState.currentLeaderEpoch
+        }
+
         val ResultWithPartitions(fetchOffsets, partitionsWithError) = maybeTruncate(leaderEpochs)
         handlePartitionsWithErrors(partitionsWithError)
         updateFetchOffsetAndMaybeMarkTruncationComplete(fetchOffsets)
@@ -272,10 +281,10 @@ abstract class AbstractFetcherThread(name: String,
                       partitionData)
 
                     logAppendInfoOpt.foreach { logAppendInfo =>
-                      val nextOffset = logAppendInfo.lastOffset + 1
+                      val validBytes = logAppendInfo.validBytes
+                      val nextOffset = if (validBytes > 0) logAppendInfo.lastOffset + 1 else currentFetchState.fetchOffset
                       fetcherLagStats.getAndMaybePut(topicPartition).lag = Math.max(0L, partitionData.highWatermark - nextOffset)
 
-                      val validBytes = logAppendInfo.validBytes
                       // ReplicaDirAlterThread may have removed topicPartition from the partitionStates after processing the partition data
                       if (validBytes > 0 && partitionStates.contains(topicPartition)) {
                         // Update partitionStates only if there is no exception during processPartitionData
