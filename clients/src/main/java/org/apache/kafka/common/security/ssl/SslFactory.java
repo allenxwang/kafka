@@ -38,6 +38,7 @@ import javax.net.ssl.TrustManagerFactory;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -356,7 +357,7 @@ public class SslFactory implements Reconfigurable {
             return Files.newInputStream(Paths.get(path));
         }
 
-        private Long lastModifiedMs(String path) {
+        protected Long lastModifiedMs(String path) {
             try {
                 return Files.getLastModifiedTime(Paths.get(path)).toMillis();
             } catch (IOException e) {
@@ -378,8 +379,8 @@ public class SslFactory implements Reconfigurable {
         }
     }
 
-    private static class SecurityResourceStore extends SecurityStore {
-        private SecurityResourceStore(String type, String path, Password password, Password keyPassword) {
+    static class SecurityResourceStore extends SecurityStore {
+        SecurityResourceStore(String type, String path, Password password, Password keyPassword) {
             super(type, path, password, keyPassword);
         }
 
@@ -390,6 +391,22 @@ public class SslFactory implements Reconfigurable {
                 throw new FileNotFoundException(path);
             }
             return input;
+        }
+
+        @Override
+        protected Long lastModifiedMs(String path) {
+            URL url = this.getClass().getResource(path);
+            if (url != null) {
+                try {
+                    return url.openConnection().getLastModified();
+                } catch (IOException e) {
+                    log.error("Modification time of key store could not be obtained: " + url, e);
+                    return null;
+                }
+            } else {
+                log.error("Modification time of key store could not be obtained from null URL");
+                return null;
+            }
         }
     }
 
