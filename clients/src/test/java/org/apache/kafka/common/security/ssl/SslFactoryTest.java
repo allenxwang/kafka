@@ -211,6 +211,12 @@ public class SslFactoryTest {
 
         SSLEngine engine = sslFactory.createSslEngine("localhost", 0);
         assertTrue(engine.getUseClientMode());
+        SslFactory.SecurityResourceStore store = new SslFactory.SecurityResourceStore("JKS", "/" + trustStoreFile.getName(),
+                (Password) clientSslConfig.get(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG),
+                (Password) clientSslConfig.get(SslConfigs.SSL_KEY_PASSWORD_CONFIG));
+        Long lastModified = store.lastModifiedMs("/" + trustStoreFile.getName());
+        assertNotNull(lastModified);
+        assertTrue(lastModified.longValue() > 0);
     }
 
     private SslFactory.SecurityStore sslKeyStore(Map<String, Object> sslConfig) {
